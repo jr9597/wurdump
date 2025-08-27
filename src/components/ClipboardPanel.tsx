@@ -327,37 +327,14 @@ export const ClipboardPanel: React.FC<ClipboardPanelProps> = ({
                       <LoadingSpinner size="md" />
                     </div>
                   ) : currentContent ? (
-                    <div className="space-y-3">
-                      <ClipboardItemComponent
-                        content={currentContent}
-                        preview={currentContent.substring(0, 200)}
-                        contentType="auto"
-                        timestamp={new Date()}
-                        onCopy={() => copyToClipboard(currentContent)}
-                        showCopyButton={false} // Already in clipboard
-                      />
-                      
-                      {/* Get AI Suggestions Button */}
-                      {aiTransformations.length === 0 && currentContent.trim() && (
-                        <button
-                          onClick={() => getAITransformations(currentContent)}
-                          disabled={isProcessingAI}
-                          className="w-full btn-secondary text-sm py-2"
-                        >
-                          {isProcessingAI ? (
-                            <div className="flex items-center justify-center gap-2">
-                              <LoadingSpinner size="sm" />
-                              Getting AI suggestions...
-                            </div>
-                          ) : (
-                            <div className="flex items-center justify-center gap-2">
-                              <Sparkles className="w-4 h-4" />
-                              Get AI Suggestions
-                            </div>
-                          )}
-                        </button>
-                      )}
-                    </div>
+                    <ClipboardItemComponent
+                      content={currentContent}
+                      preview={currentContent.substring(0, 200)}
+                      contentType="auto"
+                      timestamp={new Date()}
+                      onCopy={() => copyToClipboard(currentContent)}
+                      showCopyButton={false} // Already in clipboard
+                    />
                   ) : (
                     <p className="text-sm text-gray-500 dark:text-gray-400 py-4 text-center">
                       No clipboard content
