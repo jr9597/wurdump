@@ -1,0 +1,94 @@
+# Wurdump - AI-Enhanced Clipboard Tool
+
+## Project Overview
+Desktop AI clipboard tool built with Tauri 2.0, React + TypeScript, integrating OpenAI's gpt-oss-20b for local AI processing.
+
+## Code Style & Conventions
+
+### General
+- Use TypeScript for all code
+- Add comprehensive JSDoc comments for all functions, components, and interfaces
+- Use descriptive variable and function names
+- Prefer functional components with hooks over class components
+
+### React/Frontend
+- Use functional components with React hooks
+- Components in PascalCase (ClipboardPanel.tsx)
+- Hooks in camelCase starting with "use" (useClipboard.ts)
+- Custom hooks in separate files in hooks/ directory
+- Use React.memo for performance optimization where appropriate
+- Props interfaces should end with "Props" (ClipboardPanelProps)
+
+### File Structure
+```
+src/
+├── components/          # React components
+├── hooks/              # Custom React hooks
+├── utils/              # Utility functions
+├── types/              # TypeScript type definitions
+├── services/           # API and service layer
+├── stores/             # State management
+└── constants/          # App constants
+```
+
+### Tauri/Backend
+- All Tauri commands should be well-documented
+- Use Result<T, E> for error handling in Rust
+- Add #[tauri::command] annotation for all exposed commands
+- Use serde for JSON serialization/deserialization
+
+### Database
+- Use SQLite with proper migrations
+- Create clear table schemas with comments
+- Use prepared statements for all queries
+- Index frequently queried columns
+
+### AI Integration
+- Keep AI processing local using gpt-oss-20b
+- Cache AI results when appropriate
+- Handle AI errors gracefully with fallbacks
+- Provide loading states for AI operations
+
+### Error Handling
+- Use proper error boundaries in React
+- Log errors appropriately (console.error for dev, proper logging for prod)
+- Show user-friendly error messages
+- Implement retry mechanisms for transient failures
+
+### Performance
+- Lazy load components where possible
+- Debounce user input for search/filtering
+- Use React.memo and useMemo for expensive operations
+- Optimize clipboard monitoring to avoid performance issues
+
+### Security
+- Validate all user inputs
+- Sanitize clipboard content before AI processing
+- Use proper permissions for system clipboard access
+- Secure local storage of sensitive data
+
+## Naming Conventions
+- Files: kebab-case (clipboard-panel.tsx)
+- Components: PascalCase (ClipboardPanel)
+- Functions: camelCase (processClipboardContent)
+- Constants: SCREAMING_SNAKE_CASE (DEFAULT_HOTKEY)
+- Types/Interfaces: PascalCase (ClipboardItem, ProcessingResult)
+
+## Comments Requirements
+- Add file-level comments explaining the purpose
+- Document all exported functions with JSDoc
+- Explain complex algorithms or business logic
+- Add TODO comments for future enhancements
+- Use inline comments sparingly, only for clarification
+
+## Testing
+- Write unit tests for utility functions
+- Test React components with React Testing Library
+- Mock external dependencies (AI model, clipboard API)
+- Test error scenarios and edge cases
+
+## Git Practices
+- Use conventional commits (feat:, fix:, docs:, refactor:)
+- Keep commits atomic and focused
+- Write descriptive commit messages
+- Use feature branches for new functionality
