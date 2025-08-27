@@ -13,6 +13,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::time;
+use tauri::Manager;
 use anyhow::Result;
 use tauri::AppHandle;
 use tauri_plugin_clipboard_manager::ClipboardExt;
@@ -63,10 +64,31 @@ impl ClipboardMonitor {
      * 
      * Returns: Result indicating success or database initialization error
      */
-    pub async fn initialize_database(&mut self) -> Result<()> {
-        let db = ClipboardDatabase::new(None).await?;
+    pub async fn initialize_database(&mut self, app_handle: &tauri::AppHandle) -> Result<()> {
+        // Try to get the app's data directory, fallback to temp if needed
+        let db_path = match app_handle.path().app_data_dir() {
+            Ok(app_data_dir) => {
+                log::info!("Using app data directory: {}", app_data_dir.display());
+                app_data_dir.join("clipboard.db")
+            }
+            Err(e) => {
+                log::warn!("Failed to get app data directory: {}. Using temporary directory.", e);
+                // Fallback to system temp directory
+                let temp_dir = std::env::temp_dir().join("wurdump");
+                temp_dir.join("clipboard.db")
+            }
+        };
+        
+        log::info!("Initializing database at: {}", db_path.display());
+        
+        let db = ClipboardDatabase::new(Some(db_path)).await
+            .map_err(|e| {
+                log::error!("Database initialization failed: {}", e);
+                anyhow::anyhow!("Database initialization failed: {}", e)
+            })?;
+            
         self.database = Some(db);
-        log::info!("Clipboard monitor database initialized");
+        log::info!("✅ Clipboard monitor database initialized successfully");
         Ok(())
     }
     
@@ -123,7 +145,8 @@ impl ClipboardMonitor {
                 
                 // CLIPBOARD MONITORING CORE LOGIC
                 // Read current clipboard content using Tauri's clipboard plugin
-                if let Ok(current_content) = app_handle.clipboard().read_text() {
+                match app_handle.clipboard().read_text() {
+                    Ok(current_content) => {
                     // Check if content has actually changed (avoid unnecessary processing)
                     let needs_update = {
                         let last = last_content.lock().unwrap();
@@ -175,12 +198,15 @@ impl ClipboardMonitor {
                             log::warn!("⚠️  Database not available for storing clipboard content");
                         }
                     }
-                } else {
-                    // This can happen if:
-                    // 1. Clipboard is empty
-                    // 2. Permission denied
-                    // 3. Clipboard contains non-text content (images, files, etc.)
-                    log::debug!("Could not read clipboard text content");
+                    }
+                    Err(e) => {
+                        // Enhanced error handling for clipboard access failures
+                        log::warn!("⚠️ Failed to read clipboard: {}. This could be due to:", e);
+                        log::warn!("  - Missing clipboard permissions in production build");
+                        log::warn!("  - System clipboard access restrictions");
+                        log::warn!("  - Non-text content in clipboard");
+                        log::warn!("  - Security software blocking access");
+                    }
                 }
             }
         });

@@ -281,60 +281,13 @@ export const ClipboardPanel: React.FC<ClipboardPanelProps> = ({
             
             <div className="flex items-center gap-2 no-drag-region">
               <AIStatusIndicator compact />
-              
-              {/* Debug Test Button */}
-              <button
-                onClick={async () => {
-                  try {
-                    console.log('Testing clipboard...');
-                    const content = await ClipboardService.getCurrentContent();
-                    alert(`Clipboard: "${content}"`);
-                    console.log('Clipboard content:', content);
-                  } catch (error) {
-                    console.error('Clipboard test error:', error);
-                    alert(`Error: ${error}`);
-                  }
-                }}
-                className="px-2 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600"
-                title="Test Clipboard"
-              >
-                Test
-              </button>
-              
-              {/* Debug AI Status Button */}
-              <button
-                onClick={async () => {
-                  try {
-                    const { invoke } = await import('@tauri-apps/api/core');
-                    console.log('Testing AI status...');
-                    const status = await invoke('check_ai_status');
-                    alert(`AI Status: ${JSON.stringify(status, null, 2)}`);
-                    console.log('AI status:', status);
-                  } catch (error) {
-                    console.error('AI status test error:', error);
-                    alert(`AI Error: ${error}`);
-                  }
-                }}
-                className="px-2 py-1 text-xs bg-purple-500 text-white rounded hover:bg-purple-600"
-                title="Test AI Status"
-              >
-                AI
-              </button>
-              
+
               <button
                 onClick={onOpenSettings}
                 className="btn-ghost p-2"
                 title="Settings (Cmd+,)"
               >
                 <Settings className="w-4 h-4" />
-              </button>
-              
-              <button
-                onClick={onClose}
-                className="btn-ghost p-2"
-                title="Close (Esc)"
-              >
-                <X className="w-4 h-4" />
               </button>
             </div>
           </div>

@@ -4,6 +4,7 @@
  */
 
 use sqlx::{Pool, Sqlite, SqlitePool, Row};
+use sqlx::sqlite::SqliteConnectOptions;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 use anyhow::{Result, Context};
@@ -24,17 +25,35 @@ impl ClipboardDatabase {
      * Initialize the database connection and create tables
      */
     pub async fn new(db_path: Option<PathBuf>) -> Result<Self> {
-        let db_url = if let Some(path) = db_path {
-            format!("sqlite:{}", path.display())
+        let db_path = if let Some(path) = db_path {
+            path
         } else {
             // Default to clipboard.db in the current directory for simplicity
-            let db_path = PathBuf::from("clipboard.db");
-            format!("sqlite:{}", db_path.display())
+            PathBuf::from("clipboard.db")
         };
 
-        let pool = SqlitePool::connect(&db_url)
+        // Ensure the parent directory exists
+        if let Some(parent) = db_path.parent() {
+            if !parent.exists() {
+                std::fs::create_dir_all(parent)
+                    .context(format!("Failed to create database directory: {}", parent.display()))?;
+                log::info!("Created database directory: {}", parent.display());
+            }
+        }
+
+        // SQLite will create the file automatically with create_if_missing option
+
+        let db_url = format!("sqlite:{}", db_path.display());
+        log::info!("Connecting to database: {}", db_url);
+
+        // Try to connect to SQLite database with additional options for better compatibility
+        let connect_options = sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&db_path)
+            .create_if_missing(true);
+            
+        let pool = SqlitePool::connect_with(connect_options)
             .await
-            .context("Failed to connect to database")?;
+            .context(format!("Failed to connect to database at: {}", db_url))?;
 
         // Create tables if they don't exist
         let database = Self { 

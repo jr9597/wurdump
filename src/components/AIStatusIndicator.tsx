@@ -77,14 +77,30 @@ export const AIStatusIndicator: React.FC<AIStatusIndicatorProps> = ({
 
   // Compact view - just show an icon
   if (compact) {
+    const getTooltipText = () => {
+      if (isReady) {
+        return "AI Ready: Ollama running with gpt-oss model available";
+      } else if (isPartiallyReady) {
+        return "AI Partially Ready: Ollama running but gpt-oss model not found";
+      } else {
+        return "AI Not Available: Ollama not running";
+      }
+    };
+
     return (
       <div className={`flex items-center ${className}`}>
         {isReady ? (
-          <CheckCircle className="w-4 h-4 text-green-500" />
+          <span title={getTooltipText()}>
+            <CheckCircle className="w-4 h-4 text-green-500" />
+          </span>
         ) : isPartiallyReady ? (
-          <AlertCircle className="w-4 h-4 text-yellow-500" />
+          <span title={getTooltipText()}>
+            <AlertCircle className="w-4 h-4 text-yellow-500" />
+          </span>
         ) : (
-          <AlertCircle className="w-4 h-4 text-red-500" />
+          <span title={getTooltipText()}>
+            <AlertCircle className="w-4 h-4 text-red-500" />
+          </span>
         )}
       </div>
     );

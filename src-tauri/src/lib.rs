@@ -1,5 +1,6 @@
 use tauri::{Manager, State, WindowEvent, AppHandle};
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, GlobalShortcutExt};
+use tauri_plugin_clipboard_manager::ClipboardExt;
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
@@ -140,7 +141,7 @@ async fn setup_app_state(app: &AppHandle) -> Result<(), Box<dyn std::error::Erro
     
     // STEP 2: Initialize SQLite database for clipboard history storage
     // This creates the database file and necessary tables if they don't exist
-    monitor.initialize_database().await?;
+    monitor.initialize_database(&app).await?;
     
     // STEP 3: Start automatic clipboard monitoring
     // The monitor will check clipboard content every 1000ms (1 second)
@@ -154,6 +155,18 @@ async fn setup_app_state(app: &AppHandle) -> Result<(), Box<dyn std::error::Erro
     
     log::info!("🚀 Clipboard monitoring initialized and started with database persistence");
     log::info!("📋 Monitoring interval: 1000ms | Max items: 20 | Database: SQLite");
+    log::info!("🔧 Environment: {}", if cfg!(debug_assertions) { "Development" } else { "Production" });
+    
+    // Test clipboard access immediately
+    match app.clipboard().read_text() {
+        Ok(content) => {
+            log::info!("✅ Clipboard access test successful: {} chars", content.len());
+        }
+        Err(e) => {
+            log::error!("❌ Clipboard access test failed: {}", e);
+            log::error!("   This indicates missing permissions or system restrictions");
+        }
+    }
     Ok(())
 }
 

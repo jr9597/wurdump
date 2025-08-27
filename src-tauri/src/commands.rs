@@ -245,7 +245,7 @@ pub async fn process_with_ai(
     // Enhanced prompt building with context support
     let system_prompt = "You are an AI assistant that helps transform clipboard content. Be helpful, accurate, and preserve important information. When provided with additional context, use it to give better, more relevant responses.";
     
-    let has_custom_prompt = custom_prompt.is_some();
+    let _has_custom_prompt = custom_prompt.is_some();
     let mut user_prompt = String::new();
     
     // Add context items if provided
