@@ -3,7 +3,7 @@
  * Displays clipboard content with type detection and actions
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Copy, Code, Link, Mail, FileText, Hash } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import clsx from 'clsx';
@@ -116,9 +116,11 @@ export const ClipboardItemComponent: React.FC<ClipboardItemProps> = ({
   onCopy,
   className,
 }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
   const formattedContent = formatContent(content, contentType);
   const isCode = contentType === 'code';
   const relativeTime = formatDistanceToNow(timestamp, { addSuffix: true });
+  const needsExpansion = content.length > 150;
 
   return (
     <div className={clsx('clipboard-item group', className)}>
@@ -158,19 +160,27 @@ export const ClipboardItemComponent: React.FC<ClipboardItemProps> = ({
       )}>
         {isCode ? (
           <pre className="whitespace-pre-wrap break-words text-xs">
-            {formattedContent}
+            {isExpanded ? content : formattedContent}
           </pre>
         ) : (
           <p className="whitespace-pre-wrap break-words leading-relaxed">
-            {formattedContent}
+            {isExpanded ? content : formattedContent}
           </p>
         )}
       </div>
 
-      {/* Show character count for longer content */}
-      {content.length > 150 && (
-        <div className="mt-2 text-xs text-gray-500 dark:text-gray-500">
-          {content.length.toLocaleString()} characters
+      {/* Expand/Collapse button and character count for longer content */}
+      {needsExpansion && (
+        <div className="mt-2 flex items-center justify-between">
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="text-xs text-blue-600 dark:text-blue-400 hover:underline focus:outline-none"
+          >
+            {isExpanded ? 'Show less' : 'Show more'}
+          </button>
+          <div className="text-xs text-gray-500 dark:text-gray-500">
+            {content.length.toLocaleString()} characters
+          </div>
         </div>
       )}
     </div>

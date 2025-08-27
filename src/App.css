@@ -53,6 +53,8 @@
     @apply px-3 py-2 rounded-md text-sm font-medium;
     @apply transition-colors duration-150;
     @apply focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2;
+    @apply disabled:bg-blue-400 disabled:hover:bg-blue-400 disabled:cursor-not-allowed;
+    @apply disabled:opacity-75;
   }
   
   .btn-secondary {
@@ -78,6 +80,9 @@
     @apply rounded-md text-sm;
     @apply focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent;
     @apply placeholder-gray-400 dark:placeholder-gray-500;
+    @apply disabled:bg-gray-100 disabled:dark:bg-gray-700;
+    @apply disabled:text-gray-500 disabled:dark:text-gray-400;
+    @apply disabled:cursor-not-allowed disabled:opacity-60;
   }
   
   /* Scrollbar styling */

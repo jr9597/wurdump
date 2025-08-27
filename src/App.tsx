@@ -3,10 +3,10 @@
  * Manages the overall app state and renders the clipboard panel
  */
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { ClipboardPanel } from './components/ClipboardPanel';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { SettingsService } from './services/tauri-commands';
+// import { SettingsService } from './services/tauri-commands';
 import type { AppSettings } from './types/settings';
 import { DEFAULT_SETTINGS } from './types/settings';
 import './App.css';
@@ -15,14 +15,14 @@ import './App.css';
  * Check if we're running in Tauri context
  */
 const isTauriContext = () => {
-  return typeof window !== 'undefined' && window.__TAURI__ !== undefined;
+  return typeof window !== 'undefined' && (window as any).__TAURI__ !== undefined;
 };
 
 function App() {
   // Application state
   const [isPanelVisible, setIsPanelVisible] = useState(true); // Start visible for development
   const [isSettingsVisible, setIsSettingsVisible] = useState(false);
-  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [_settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [isLoading, setIsLoading] = useState(true);
 
   /**
@@ -68,18 +68,7 @@ function App() {
     setIsSettingsVisible(false);
   };
 
-  /**
-   * Handle settings update
-   */
-  const handleUpdateSettings = async (newSettings: AppSettings) => {
-    try {
-      await SettingsService.updateSettings(newSettings);
-      setSettings(newSettings);
-    } catch (error) {
-      console.error('Failed to update settings:', error);
-      // In a real app, we'd show an error notification here
-    }
-  };
+
 
   // Show loading state while initializing
   if (isLoading) {

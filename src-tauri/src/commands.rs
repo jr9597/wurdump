@@ -7,6 +7,8 @@ use tauri::{command, State, Manager};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use crate::{AppState, ClipboardItem, AITransformation, AppSettings};
 use anyhow::Result;
+use tokio::sync::broadcast;
+use uuid::Uuid;
 
 /**
  * Get the current clipboard content
@@ -44,13 +46,35 @@ pub async fn set_clipboard_content(app: tauri::AppHandle, content: String) -> Re
  */
 #[command]
 pub async fn get_clipboard_history(
-    _state: State<'_, AppState>,
-    _limit: Option<u32>,
-    _offset: Option<u32>
+    state: State<'_, AppState>,
+    limit: Option<u32>,
+    offset: Option<u32>
 ) -> Result<Vec<ClipboardItem>, String> {
-    // TODO: Implement clipboard history storage
-    // For now, return empty history
-    Ok(vec![])
+    let monitor = {
+        let monitor_guard = state.clipboard_monitor.lock().unwrap();
+        monitor_guard.clone()
+    };
+    
+    if let Some(monitor) = monitor {
+        if let Some(db) = monitor.get_database() {
+            let limit = limit.unwrap_or(20);
+            let offset = offset.unwrap_or(0);
+            
+            match db.get_clipboard_history(limit, offset).await {
+                Ok(items) => Ok(items),
+                Err(e) => {
+                    log::error!("Failed to get clipboard history: {}", e);
+                    Err("Failed to fetch clipboard history".to_string())
+                }
+            }
+        } else {
+            log::warn!("Database not initialized");
+            Ok(vec![])
+        }
+    } else {
+        log::warn!("Clipboard monitor not initialized");
+        Ok(vec![])
+    }
 }
 
 /**
@@ -58,22 +82,66 @@ pub async fn get_clipboard_history(
  */
 #[command]
 pub async fn delete_clipboard_item(
-    _state: State<'_, AppState>,
+    state: State<'_, AppState>,
     item_id: String
 ) -> Result<(), String> {
-    // TODO: Implement clipboard history storage
-    log::info!("Would delete clipboard item: {}", item_id);
-    Ok(())
+    let monitor = {
+        let monitor_guard = state.clipboard_monitor.lock().unwrap();
+        monitor_guard.clone()
+    };
+    
+    if let Some(monitor) = monitor {
+        if let Some(db) = monitor.get_database() {
+            match db.delete_clipboard_item(&item_id).await {
+                Ok(()) => {
+                    log::info!("Deleted clipboard item: {}", item_id);
+                    Ok(())
+                }
+                Err(e) => {
+                    log::error!("Failed to delete clipboard item {}: {}", item_id, e);
+                    Err("Failed to delete clipboard item".to_string())
+                }
+            }
+        } else {
+            log::warn!("Database not initialized");
+            Err("Database not available".to_string())
+        }
+    } else {
+        log::warn!("Clipboard monitor not initialized");
+        Err("Clipboard monitor not available".to_string())
+    }
 }
 
 /**
  * Clear all clipboard history
  */
 #[command]
-pub async fn clear_clipboard_history(_state: State<'_, AppState>) -> Result<(), String> {
-    // TODO: Implement clipboard history storage
-    log::info!("Would clear clipboard history");
-    Ok(())
+pub async fn clear_clipboard_history(state: State<'_, AppState>) -> Result<(), String> {
+    let monitor = {
+        let monitor_guard = state.clipboard_monitor.lock().unwrap();
+        monitor_guard.clone()
+    };
+    
+    if let Some(monitor) = monitor {
+        if let Some(db) = monitor.get_database() {
+            match db.clear_clipboard_history().await {
+                Ok(()) => {
+                    log::info!("Cleared all clipboard history");
+                    Ok(())
+                }
+                Err(e) => {
+                    log::error!("Failed to clear clipboard history: {}", e);
+                    Err("Failed to clear clipboard history".to_string())
+                }
+            }
+        } else {
+            log::warn!("Database not initialized");
+            Err("Database not available".to_string())
+        }
+    } else {
+        log::warn!("Clipboard monitor not initialized");
+        Err("Clipboard monitor not available".to_string())
+    }
 }
 
 /**
@@ -118,35 +186,88 @@ pub async fn unregister_global_shortcut() -> Result<(), String> {
     Ok(())
 }
 
+// Static HTTP client for connection pooling with improved configuration
+static HTTP_CLIENT: once_cell::sync::Lazy<reqwest::Client> = once_cell::sync::Lazy::new(|| {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120)) // Increased timeout for large models
+        .connect_timeout(std::time::Duration::from_secs(10)) // Quick connection detection
+        .pool_idle_timeout(std::time::Duration::from_secs(30)) // Keep connections alive
+        .pool_max_idle_per_host(4) // Maintain connection pool
+        .tcp_keepalive(std::time::Duration::from_secs(60)) // Keep TCP connections alive
+        .http1_title_case_headers() // Better compatibility with Ollama
+        .build()
+        .expect("Failed to create HTTP client")
+});
+
 /**
- * Process clipboard content with AI
+ * Process clipboard content with AI using custom prompt and optional context
+ * 
+ * Enhanced with improved error handling, retry logic, and context support
  */
 #[command]
 pub async fn process_with_ai(
     content: String,
-    custom_prompt: Option<String>
+    custom_prompt: Option<String>,
+    context_items: Option<Vec<String>>, // New: Support for additional context
+    state: State<'_, AppState>
 ) -> Result<Vec<AITransformation>, String> {
-    log::info!("Processing content with AI: {} chars", content.len());
-    if let Some(prompt) = &custom_prompt {
-        log::info!("Custom prompt: {}", prompt);
+    if content.trim().is_empty() {
+        return Err("Content is empty".to_string());
+    }
+
+    log::info!("🤖 Processing content with AI: {} chars, {} context items", 
+               content.len(), 
+               context_items.as_ref().map(|items| items.len()).unwrap_or(0));
+    
+    // Debug logging to check if context is being received
+    if let Some(ref context) = context_items {
+        log::info!("📝 Context items received: {:?}", context.iter().map(|item| &item[..50.min(item.len())]).collect::<Vec<_>>());
+    } else {
+        log::info!("📝 No context items received");
+    }
+
+    // Create a unique task ID for this request
+    let task_id = Uuid::new_v4().to_string();
+    let (cancel_tx, mut cancel_rx) = broadcast::channel(1);
+
+    // Store the cancellation token
+    {
+        let mut tasks = state.active_ai_tasks.lock().unwrap();
+        tasks.insert(task_id.clone(), cancel_tx);
+    }
+
+    // Enhanced prompt building with context support
+    let system_prompt = "You are an AI assistant that helps transform clipboard content. Be helpful, accurate, and preserve important information. When provided with additional context, use it to give better, more relevant responses.";
+    
+    let _has_custom_prompt = custom_prompt.is_some();
+    let mut user_prompt = String::new();
+    
+    // Add context items if provided
+    if let Some(ref context) = context_items {
+        if !context.is_empty() {
+            user_prompt.push_str("Additional Context:\n");
+            for (i, item) in context.iter().enumerate() {
+                user_prompt.push_str(&format!("Context {}: {}\n\n", i + 1, item));
+            }
+            user_prompt.push_str("---\n\n");
+        }
     }
     
-    // Make HTTP request to Ollama
-    let client = reqwest::Client::new();
-    let ollama_url = "http://localhost:11434/v1/chat/completions";
+    // Add main content and request
+    user_prompt.push_str(&format!("Main Content:\n```\n{}\n```\n\n", content));
     
-    // Prepare the request based on whether we have a custom prompt
-    let (system_prompt, user_prompt) = if let Some(prompt) = custom_prompt {
-        (
-            "You are an AI assistant that helps transform clipboard content. Be helpful, accurate, and preserve important information while following the user's request.".to_string(),
-            format!("Here is the clipboard content:\n```\n{}\n```\n\nUser's request: {}\n\nPlease process the content according to the user's request:", content, prompt)
-        )
+    if let Some(ref prompt) = custom_prompt {
+        user_prompt.push_str(&format!("Request: {}", prompt));
     } else {
-        (
-            "You are an AI assistant that helps improve and transform text. Make the content more professional and well-formatted.".to_string(),
-            format!("Please improve and format this content:\n\n{}", content)
-        )
-    };
+        user_prompt.push_str("Please improve and format this content, taking into account any provided context.");
+    }
+
+    // Debug: log the final prompt being sent
+    log::info!("📤 Final user prompt (first 500 chars): {}", &user_prompt[..500.min(user_prompt.len())]);
+    
+    // Build request with dynamic token limit based on content size
+    let estimated_tokens = (content.len() + user_prompt.len()) / 4; // Rough estimation
+    let max_tokens = if estimated_tokens > 2000 { 2000 } else { 1000 };
     
     let request_body = serde_json::json!({
         "model": "gpt-oss:20b",
@@ -155,232 +276,135 @@ pub async fn process_with_ai(
             {"role": "user", "content": user_prompt}
         ],
         "temperature": 0.7,
-        "max_tokens": 1000
+        "max_tokens": max_tokens,
+        "stream": false // Ensure we get complete response
     });
+
+    // Retry logic with exponential backoff
+    let max_retries = 3;
+    let mut last_error = String::new();
     
-    match client
-        .post(ollama_url)
-        .header("Content-Type", "application/json")
-        .json(&request_body)
-        .timeout(std::time::Duration::from_secs(30))
-        .send()
-        .await
-    {
-        Ok(response) => {
-            if response.status().is_success() {
-                match response.json::<serde_json::Value>().await {
-                    Ok(json) => {
-                        if let Some(choices) = json["choices"].as_array() {
-                            if let Some(first_choice) = choices.first() {
-                                if let Some(content) = first_choice["message"]["content"].as_str() {
-                                    let transformation = AITransformation {
-                                        id: format!("ai-{}", chrono::Utc::now().timestamp()),
-                                        title: "AI Enhancement".to_string(),
-                                        description: "AI-improved version of your content".to_string(),
-                                        result: content.to_string(),
-                                        confidence: 0.85,
-                                        is_applied: false,
-                                        transformation_type: "enhancement".to_string(),
-                                    };
-                                    
-                                    return Ok(vec![transformation]);
-                                }
-                            }
-                        }
-                        Err("Invalid response format from AI".to_string())
-                    }
-                    Err(e) => Err(format!("Failed to parse AI response: {}", e))
-                }
-            } else {
-                Err(format!("AI service error: {}", response.status()))
+    for attempt in 1..=max_retries {
+        log::debug!("🔄 AI request attempt {}/{}", attempt, max_retries);
+        
+        // Make the request with cancellation support
+        let result = tokio::select! {
+            response_result = make_ai_request(&request_body) => {
+                response_result
             }
-        }
-        Err(e) => {
-            if e.is_timeout() {
-                Err("AI request timed out. Make sure Ollama is running with: ollama serve".to_string())
-            } else if e.is_connect() {
-                Err("Cannot connect to AI service. Please start Ollama: ollama serve".to_string())
-            } else {
-                Err(format!("AI request failed: {}", e))
+            _ = cancel_rx.recv() => {
+                // Clean up the task from active tasks
+                {
+                    let mut tasks = state.active_ai_tasks.lock().unwrap();
+                    tasks.remove(&task_id);
+                }
+                log::info!("❌ AI request cancelled: {}", task_id);
+                return Err("Request cancelled by user".to_string());
+            }
+        };
+
+        match result {
+            Ok(transformation) => {
+                // Clean up the task from active tasks
+                {
+                    let mut tasks = state.active_ai_tasks.lock().unwrap();
+                    tasks.remove(&task_id);
+                }
+                
+                log::info!("✅ AI processing completed successfully on attempt {}", attempt);
+                return Ok(vec![transformation]);
+            }
+            Err(e) => {
+                last_error = e;
+                log::warn!("⚠️  AI request attempt {} failed: {}", attempt, last_error);
+                
+                // Don't retry for certain errors
+                if last_error.contains("cancelled") || 
+                   last_error.contains("Invalid response format") ||
+                   last_error.contains("Cannot connect") {
+                    break;
+                }
+                
+                // Exponential backoff before retry
+                if attempt < max_retries {
+                    let delay = std::time::Duration::from_millis(1000 * (2_u64.pow(attempt - 1)));
+                    log::debug!("⏳ Waiting {}ms before retry", delay.as_millis());
+                    tokio::time::sleep(delay).await;
+                }
             }
         }
     }
+
+    // Clean up the task from active tasks
+    {
+        let mut tasks = state.active_ai_tasks.lock().unwrap();
+        tasks.remove(&task_id);
+    }
+
+    log::error!("❌ AI processing failed after {} attempts: {}", max_retries, last_error);
+    Err(format!("AI processing failed after {} attempts: {}", max_retries, last_error))
 }
 
 /**
- * Get available AI transformations for content
+ * Helper function to make AI requests with improved error handling
  */
-#[command]
-pub async fn get_ai_transformations(
-    content: String,
-    content_type: String
-) -> Result<Vec<AITransformation>, String> {
-    log::info!("Getting AI transformations for {} content", content_type);
-    
-    let mut transformations = Vec::new();
-    let client = reqwest::Client::new();
-    let ollama_url = "http://localhost:11434/v1/chat/completions";
-    
-    // Define different transformation prompts based on content type
-    let prompts = get_transformation_prompts(&content, &content_type);
-    
-    for (i, prompt_info) in prompts.iter().enumerate() {
-        let request_body = serde_json::json!({
-            "model": "gpt-oss:20b",
-            "messages": [
-                {"role": "system", "content": prompt_info.system_prompt},
-                {"role": "user", "content": prompt_info.user_prompt}
-            ],
-            "temperature": 0.7,
-            "max_tokens": 800
-        });
-        
-        match client
-            .post(ollama_url)
-            .header("Content-Type", "application/json")
-            .json(&request_body)
-            .timeout(std::time::Duration::from_secs(20))
-            .send()
-            .await
-        {
-            Ok(response) => {
-                if response.status().is_success() {
-                    if let Ok(json) = response.json::<serde_json::Value>().await {
-                        if let Some(choices) = json["choices"].as_array() {
-                            if let Some(first_choice) = choices.first() {
-                                if let Some(result) = first_choice["message"]["content"].as_str() {
-                                    transformations.push(AITransformation {
-                                        id: format!("{}-{}-{}", prompt_info.transformation_type, chrono::Utc::now().timestamp(), i),
-                                        title: prompt_info.title.clone(),
-                                        description: prompt_info.description.clone(),
-                                        result: result.to_string(),
-                                        confidence: prompt_info.confidence,
-                                        is_applied: false,
-                                        transformation_type: prompt_info.transformation_type.clone(),
-                                    });
-                                }
-                            }
-                        }
-                    }
-                }
+async fn make_ai_request(request_body: &serde_json::Value) -> Result<AITransformation, String> {
+    let response = HTTP_CLIENT
+        .post("http://localhost:11434/v1/chat/completions")
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .json(request_body)
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_timeout() {
+                "AI request timed out (120s). The model might be busy or Ollama needs restart.".to_string()
+            } else if e.is_connect() {
+                "Cannot connect to AI service. Please start Ollama: ollama serve".to_string()
+            } else {
+                format!("Network error: {}", e)
             }
-            Err(e) => {
-                log::warn!("Failed to get {} transformation: {}", prompt_info.transformation_type, e);
-                // Continue with other transformations
-            }
-        }
+        })?;
+
+    if !response.status().is_success() {
+        return Err(format!("AI service error: {} - {}", 
+                          response.status(), 
+                          response.text().await.unwrap_or_else(|_| "Unknown error".to_string())));
     }
-    
-    // If no AI transformations worked, return some basic ones
-    if transformations.is_empty() {
-        transformations.push(AITransformation {
-            id: format!("fallback-{}", chrono::Utc::now().timestamp()),
-            title: "AI Unavailable".to_string(),
-            description: "Start Ollama to enable AI transformations".to_string(),
-            result: "Please run 'ollama serve' and 'ollama run gpt-oss:20b' to enable AI features.".to_string(),
-            confidence: 0.1,
-            is_applied: false,
-            transformation_type: "error".to_string(),
-        });
+
+    let json = response.json::<serde_json::Value>().await
+        .map_err(|e| format!("Failed to parse AI response as JSON: {}", e))?;
+
+    // Better response validation
+    let content = json
+        .get("choices")
+        .and_then(|choices| choices.get(0))
+        .and_then(|choice| choice.get("message"))
+        .and_then(|message| message.get("content"))
+        .and_then(|content| content.as_str())
+        .ok_or_else(|| {
+            log::error!("Invalid AI response structure: {}", json);
+            "Invalid response format from AI service".to_string()
+        })?;
+
+    if content.trim().is_empty() {
+        return Err("AI returned empty response".to_string());
     }
-    
-    Ok(transformations)
+
+    let transformation = AITransformation {
+        id: format!("ai-{}", chrono::Utc::now().timestamp()),
+        title: "AI Enhanced Content".to_string(),
+        description: "AI-processed content with context".to_string(),
+        result: content.to_string(),
+        confidence: 0.9,
+        is_applied: false,
+        transformation_type: "enhancement".to_string(),
+    };
+
+    Ok(transformation)
 }
 
-struct TransformationPrompt {
-    transformation_type: String,
-    title: String,
-    description: String,
-    system_prompt: String,
-    user_prompt: String,
-    confidence: f64,
-}
 
-fn get_transformation_prompts(content: &str, content_type: &str) -> Vec<TransformationPrompt> {
-    let mut prompts = Vec::new();
-    
-    // Code transformations
-    if content_type == "code" || is_code_like(content) {
-        prompts.push(TransformationPrompt {
-            transformation_type: "language_conversion".to_string(),
-            title: "Convert to TypeScript".to_string(),
-            description: "Convert code to TypeScript with proper types".to_string(),
-            system_prompt: "You are a code conversion expert. Convert code to TypeScript while preserving functionality and adding proper type annotations. Only return the converted code, no explanations.".to_string(),
-            user_prompt: format!("Convert this code to TypeScript:\n```\n{}\n```", content),
-            confidence: 0.85,
-        });
-        
-        prompts.push(TransformationPrompt {
-            transformation_type: "cleanup".to_string(),
-            title: "Clean & Format".to_string(),
-            description: "Clean up and format the code with best practices".to_string(),
-            system_prompt: "You are a code formatter. Improve code quality, formatting, and readability while preserving functionality. Only return the improved code, no explanations.".to_string(),
-            user_prompt: format!("Clean and format this code:\n```\n{}\n```", content),
-            confidence: 0.8,
-        });
-    }
-    
-    // Text transformations
-    if content_type == "text" || content_type == "email" {
-        prompts.push(TransformationPrompt {
-            transformation_type: "enhancement".to_string(),
-            title: "Professional Tone".to_string(),
-            description: "Rewrite in a professional, business-appropriate tone".to_string(),
-            system_prompt: "You are a professional writing assistant. Rewrite text to be more professional and business-appropriate while preserving the core message. Only return the rewritten text.".to_string(),
-            user_prompt: format!("Make this text more professional:\n\n{}", content),
-            confidence: 0.9,
-        });
-        
-        prompts.push(TransformationPrompt {
-            transformation_type: "summarization".to_string(),
-            title: "Summarize".to_string(),
-            description: "Create a concise summary of the content".to_string(),
-            system_prompt: "You are a summarization expert. Create clear, concise summaries that capture the key points. Only return the summary.".to_string(),
-            user_prompt: format!("Summarize this text:\n\n{}", content),
-            confidence: 0.75,
-        });
-    }
-    
-    // JSON/Data transformations
-    if content_type == "json" || is_json_like(content) {
-        prompts.push(TransformationPrompt {
-            transformation_type: "format_conversion".to_string(),
-            title: "Convert to CSV".to_string(),
-            description: "Convert JSON data to CSV format".to_string(),
-            system_prompt: "You are a data conversion expert. Convert JSON to CSV format while preserving all information. Only return the CSV data.".to_string(),
-            user_prompt: format!("Convert this JSON to CSV format:\n```json\n{}\n```", content),
-            confidence: 0.8,
-        });
-    }
-    
-    // Universal transformations
-    prompts.push(TransformationPrompt {
-        transformation_type: "explanation".to_string(),
-        title: "Explain Content".to_string(),
-        description: "Provide a clear explanation of what this content does or means".to_string(),
-        system_prompt: "You are an expert explainer. Break down complex content into easy-to-understand explanations.".to_string(),
-        user_prompt: format!("Explain what this content does or means:\n\n{}", content),
-        confidence: 0.7,
-    });
-    
-    prompts
-}
-
-fn is_code_like(content: &str) -> bool {
-    let code_indicators = [
-        "function", "def ", "class ", "import ", "const ", "let ", "var ",
-        "=>", "{", "}", "()", "if (", "for (", "while (", "//", "/*", "*/",
-        "public ", "private ", "protected ", "static ", "async ", "await "
-    ];
-    
-    code_indicators.iter().any(|indicator| content.contains(indicator))
-}
-
-fn is_json_like(content: &str) -> bool {
-    let trimmed = content.trim();
-    (trimmed.starts_with('{') && trimmed.ends_with('}')) ||
-    (trimmed.starts_with('[') && trimmed.ends_with(']'))
-}
 
 /**
  * Check if Ollama is running and has gpt-oss model
@@ -389,10 +413,10 @@ fn is_json_like(content: &str) -> bool {
 pub async fn check_ai_status() -> Result<serde_json::Value, String> {
     let client = reqwest::Client::new();
     
-    // Check if Ollama is running
+    // Check if Ollama is running (increased timeout for busy server)
     match client
         .get("http://localhost:11434/api/tags")
-        .timeout(std::time::Duration::from_secs(5))
+        .timeout(std::time::Duration::from_secs(10))
         .send()
         .await
     {
@@ -460,6 +484,24 @@ pub async fn toggle_panel_visibility(app_handle: tauri::AppHandle) -> Result<boo
     } else {
         Err("Main window not found".to_string())
     }
+}
+
+/**
+ * Cancel all active AI requests
+ */
+#[command]
+pub async fn cancel_ai_requests(state: State<'_, AppState>) -> Result<(), String> {
+    let mut tasks = state.active_ai_tasks.lock().unwrap();
+    let task_count = tasks.len();
+    
+    // Send cancellation signal to all active tasks
+    for (task_id, cancel_tx) in tasks.drain() {
+        let _ = cancel_tx.send(());
+        log::info!("Cancelled AI task: {}", task_id);
+    }
+    
+    log::info!("Cancelled {} AI task(s)", task_count);
+    Ok(())
 }
 
 /**

@@ -4,9 +4,9 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { X, Settings, Search, Sparkles, Copy, Trash2, Heart } from 'lucide-react';
+import { X, Settings, Sparkles, Trash2, Plus } from 'lucide-react';
 import { useHotkeys } from 'react-hotkeys-hook';
-import { ClipboardService, AIService } from '../services/tauri-commands';
+import { ClipboardService, AIService, PanelService } from '../services/tauri-commands';
 import type { ClipboardItem, AITransformation } from '../types/clipboard';
 import { ClipboardItemComponent } from './ClipboardItem';
 import { AITransformationList } from './AITransformationList';
@@ -43,9 +43,13 @@ export const ClipboardPanel: React.FC<ClipboardPanelProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'current' | 'history'>('current');
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
+  
+  // Context management for AI prompts
+  const [contextItems, setContextItems] = useState<ClipboardItem[]>([]);
 
   /**
-   * Load current clipboard content with AI transformations
+   * Load current clipboard content
    */
   const loadCurrentContent = useCallback(async () => {
     try {
@@ -55,12 +59,6 @@ export const ClipboardPanel: React.FC<ClipboardPanelProps> = ({
       const content = await ClipboardService.getCurrentContent();
       console.log('loadCurrentContent: Got content:', content);
       setCurrentContent(content);
-      
-      // Automatically get AI transformations if content exists
-      if (content.trim()) {
-        console.log('loadCurrentContent: Getting AI transformations...');
-        await getAITransformations(content);
-      }
     } catch (err) {
       console.error('loadCurrentContent: Error:', err);
       setError(err instanceof Error ? err.message : 'Failed to load clipboard content');
@@ -71,7 +69,7 @@ export const ClipboardPanel: React.FC<ClipboardPanelProps> = ({
   }, []);
 
   /**
-   * Monitor clipboard content without triggering AI transformations
+   * Monitor clipboard content changes
    */
   const monitorClipboardContent = useCallback(async () => {
     try {
@@ -104,41 +102,70 @@ export const ClipboardPanel: React.FC<ClipboardPanelProps> = ({
     }
   }, []);
 
-  /**
-   * Get AI transformations for content
-   */
-  const getAITransformations = useCallback(async (content: string) => {
-    if (!content.trim()) return;
-    
-    try {
-      setIsProcessingAI(true);
-      const transformations = await AIService.getTransformations(content, 'auto');
-      setAiTransformations(transformations);
-    } catch (err) {
-      console.error('Failed to get AI transformations:', err);
-      // Don't set error state for AI failures, just log them
-    } finally {
-      setIsProcessingAI(false);
-    }
-  }, []);
+
 
   /**
-   * Process content with custom AI prompt
+   * Process content with custom AI prompt and context items
    */
   const processWithCustomPrompt = useCallback(async () => {
     if (!currentContent.trim() || !customPrompt.trim()) return;
     
+    // Create new AbortController for this request
+    const controller = new AbortController();
+    setAbortController(controller);
+    
     try {
       setIsProcessingAI(true);
-      const transformations = await AIService.processWithAI(currentContent, customPrompt);
+      
+      // Prepare context items for AI processing
+      const contextStrings = contextItems.map(item => item.content);
+      
+      const transformations = await AIService.processWithAI(
+        currentContent, 
+        customPrompt,
+        contextStrings.length > 0 ? contextStrings : undefined
+      );
+      
+      // Check if request was cancelled
+      if (controller.signal.aborted) {
+        console.log('AI request was cancelled');
+        return;
+      }
+      
       setAiTransformations(transformations);
       setCustomPrompt(''); // Clear prompt after processing
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        console.log('AI request cancelled by user');
+        // Don't show error for user-cancelled requests
+        return;
+      }
       setError(err instanceof Error ? err.message : 'AI processing failed');
     } finally {
       setIsProcessingAI(false);
+      setAbortController(null);
     }
-  }, [currentContent, customPrompt]);
+  }, [currentContent, customPrompt, contextItems]);
+
+  /**
+   * Cancel the current AI request
+   */
+  const cancelAIRequest = useCallback(async () => {
+    try {
+      await PanelService.cancelAIRequests();
+      setIsProcessingAI(false);
+      setAbortController(null);
+      console.log('AI request cancelled by user');
+    } catch (error) {
+      console.error('Failed to cancel AI request:', error);
+      // Fallback to frontend-only cancellation
+      if (abortController) {
+        abortController.abort();
+        setAbortController(null);
+        setIsProcessingAI(false);
+      }
+    }
+  }, [abortController]);
 
   /**
    * Copy content to clipboard
@@ -165,6 +192,30 @@ export const ClipboardPanel: React.FC<ClipboardPanelProps> = ({
       setError(err instanceof Error ? err.message : 'Failed to delete item');
     }
   }, [loadClipboardHistory]);
+
+  /**
+   * Add clipboard item to context for AI processing
+   */
+  const addToContext = useCallback((item: ClipboardItem) => {
+    // Check if item is already in context
+    if (!contextItems.find(contextItem => contextItem.id === item.id)) {
+      setContextItems(prev => [...prev, item]);
+    }
+  }, [contextItems]);
+
+  /**
+   * Remove item from context
+   */
+  const removeFromContext = useCallback((itemId: string) => {
+    setContextItems(prev => prev.filter(item => item.id !== itemId));
+  }, []);
+
+  /**
+   * Clear all context items
+   */
+  const clearAllContext = useCallback(() => {
+    setContextItems([]);
+  }, []);
 
   // Keyboard shortcuts
   useHotkeys('escape', onClose, { enabled: isVisible });
@@ -195,6 +246,25 @@ export const ClipboardPanel: React.FC<ClipboardPanelProps> = ({
 
     return () => clearInterval(interval);
   }, [isVisible, monitorClipboardContent]);
+
+  // Refresh history when the history tab becomes active
+  useEffect(() => {
+    if (isVisible && activeTab === 'history') {
+      loadClipboardHistory();
+    }
+  }, [isVisible, activeTab, loadClipboardHistory]);
+
+  // Refresh history when clipboard content changes (indicates new items may have been added)
+  useEffect(() => {
+    if (isVisible && activeTab === 'history' && currentContent) {
+      // Debounce to avoid too frequent refreshes
+      const timeoutId = setTimeout(() => {
+        loadClipboardHistory();
+      }, 500);
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [currentContent, isVisible, activeTab, loadClipboardHistory]);
 
   // Don't render if not visible
   if (!isVisible) return null;
@@ -342,10 +412,55 @@ export const ClipboardPanel: React.FC<ClipboardPanelProps> = ({
                   )}
                 </div>
 
+                {/* Context Items Section */}
+                {contextItems.length > 0 && (
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Added Context ({contextItems.length})
+                      </label>
+                      <button
+                        onClick={clearAllContext}
+                        className="text-xs text-red-600 dark:text-red-400 hover:underline"
+                      >
+                        Clear All
+                      </button>
+                    </div>
+                    
+                    <div className="space-y-2 max-h-32 overflow-y-auto scrollbar-thin">
+                      {contextItems.map((item) => (
+                        <div
+                          key={item.id}
+                          className="group relative bg-gray-50 dark:bg-gray-800 p-2 rounded border"
+                        >
+                          <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">
+                            {new Date(item.timestamp).toLocaleTimeString()}
+                          </div>
+                          <div className="text-sm text-gray-900 dark:text-gray-100 pr-6">
+                            {item.preview}
+                          </div>
+                          <button
+                            onClick={() => removeFromContext(item.id)}
+                            className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity bg-red-500 hover:bg-red-600 text-white p-1 rounded text-xs"
+                            title="Remove from context"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Custom AI Prompt */}
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     AI Assistant
+                    {contextItems.length > 0 && (
+                      <span className="ml-2 text-xs text-blue-600 dark:text-blue-400">
+                        (with {contextItems.length} context item{contextItems.length !== 1 ? 's' : ''})
+                      </span>
+                    )}
                   </label>
                   
                   <div className="flex gap-2">
@@ -353,27 +468,39 @@ export const ClipboardPanel: React.FC<ClipboardPanelProps> = ({
                       type="text"
                       value={customPrompt}
                       onChange={(e) => setCustomPrompt(e.target.value)}
-                      placeholder="Ask AI to transform the content..."
+                      placeholder={isProcessingAI ? "Processing your request..." : "Ask AI to transform the content..."}
                       className="input-field flex-1 text-sm"
+                      disabled={isProcessingAI}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter' && customPrompt.trim()) {
+                        if (e.key === 'Enter' && customPrompt.trim() && !isProcessingAI) {
                           processWithCustomPrompt();
                         }
                       }}
                     />
                     
-                    <button
-                      onClick={processWithCustomPrompt}
-                      disabled={!currentContent.trim() || !customPrompt.trim() || isProcessingAI}
-                      className="btn-primary px-3"
-                      title="Process with AI"
-                    >
-                      {isProcessingAI ? (
-                        <LoadingSpinner size="sm" />
-                      ) : (
-                        <Sparkles className="w-4 h-4" />
-                      )}
-                    </button>
+                    <div className="relative group">
+                      <button
+                        onClick={isProcessingAI ? cancelAIRequest : processWithCustomPrompt}
+                        disabled={!currentContent.trim() || (!customPrompt.trim() && !isProcessingAI)}
+                        className="btn-primary px-3 relative overflow-hidden"
+                        title={isProcessingAI ? "Click to cancel" : "Process with AI"}
+                      >
+                        {isProcessingAI ? (
+                          <>
+                            {/* Default loading spinner */}
+                            <div className="group-hover:opacity-0 transition-opacity duration-200">
+                              <LoadingSpinner size="sm" color="text-white" />
+                            </div>
+                            {/* Cancel icon on hover */}
+                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                              <X className="w-4 h-4 text-white" />
+                            </div>
+                          </>
+                        ) : (
+                          <Sparkles className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -428,13 +555,32 @@ export const ClipboardPanel: React.FC<ClipboardPanelProps> = ({
                               showCopyButton={true}
                             />
                             
-                            <button
-                              onClick={() => deleteClipboardItem(item.id)}
-                              className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-red-500 hover:bg-red-600 text-white p-1 rounded text-xs"
-                              title="Delete item"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
+                            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                              <button
+                                onClick={() => addToContext(item)}
+                                disabled={contextItems.some(contextItem => contextItem.id === item.id)}
+                                className={`p-1 rounded text-xs ${
+                                  contextItems.some(contextItem => contextItem.id === item.id)
+                                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                    : 'bg-blue-500 hover:bg-blue-600 text-white'
+                                }`}
+                                title={
+                                  contextItems.some(contextItem => contextItem.id === item.id)
+                                    ? 'Already added to context'
+                                    : 'Add to AI context'
+                                }
+                              >
+                                <Plus className="w-3 h-3" />
+                              </button>
+                              
+                              <button
+                                onClick={() => deleteClipboardItem(item.id)}
+                                className="bg-red-500 hover:bg-red-600 text-white p-1 rounded text-xs"
+                                title="Delete item"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
                           </div>
                         ))}
                     </div>

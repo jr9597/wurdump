@@ -4,7 +4,8 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
-import type { ClipboardItem, AITransformation, SearchFilters, AppSettings } from '../types/clipboard';
+import type { ClipboardItem, AITransformation } from '../types/clipboard';
+import type { AppSettings } from '../types/settings';
 
 /**
  * Clipboard operations
@@ -76,16 +77,18 @@ export class ClipboardService {
  */
 export class AIService {
   /**
-   * Process content with AI using custom prompt
+   * Process content with AI using custom prompt and optional context
    */
   static async processWithAI(
     content: string, 
-    customPrompt?: string
+    customPrompt?: string,
+    contextItems?: string[]
   ): Promise<AITransformation[]> {
     try {
       return await invoke<AITransformation[]>('process_with_ai', { 
         content, 
-        customPrompt 
+        custom_prompt: customPrompt,
+        context_items: contextItems
       });
     } catch (error) {
       console.error('Failed to process content with AI:', error);
@@ -93,23 +96,7 @@ export class AIService {
     }
   }
 
-  /**
-   * Get AI transformations for content
-   */
-  static async getTransformations(
-    content: string, 
-    contentType: string
-  ): Promise<AITransformation[]> {
-    try {
-      return await invoke<AITransformation[]>('get_ai_transformations', { 
-        content, 
-        contentType 
-      });
-    } catch (error) {
-      console.error('Failed to get AI transformations:', error);
-      throw new Error('Failed to get AI transformations');
-    }
-  }
+
 }
 
 /**
@@ -198,6 +185,18 @@ export class PanelService {
     } catch (error) {
       console.error('Failed to show panel:', error);
       throw new Error('Failed to show panel');
+    }
+  }
+
+  /**
+   * Cancel all active AI requests
+   */
+  static async cancelAIRequests(): Promise<void> {
+    try {
+      await invoke('cancel_ai_requests');
+    } catch (error) {
+      console.error('Failed to cancel AI requests:', error);
+      throw new Error('Failed to cancel AI requests');
     }
   }
 }

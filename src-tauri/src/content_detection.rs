@@ -10,6 +10,7 @@ use crate::clipboard_monitor::ClipboardContentInfo;
 /**
  * Content detection engine
  */
+#[derive(Clone)]
 pub struct ContentDetector {
     url_regex: Regex,
     email_regex: Regex,

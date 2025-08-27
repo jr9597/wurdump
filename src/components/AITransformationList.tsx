@@ -72,7 +72,7 @@ const AITransformationItem: React.FC<{
       {/* Header */}
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-center gap-2 flex-1">
-          {getTransformationIcon(transformation.transformation_type)}
+          {getTransformationIcon(transformation.transformationType)}
           <div className="flex-1 min-w-0">
             <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
               {transformation.title}
@@ -107,8 +107,8 @@ const AITransformationItem: React.FC<{
           )}
           onClick={() => setIsExpanded(!isExpanded)}
         >
-          {transformation.transformation_type === 'language_conversion' || 
-           transformation.transformation_type === 'format_conversion' ? (
+          {transformation.transformationType === 'language_conversion' || 
+           transformation.transformationType === 'format_conversion' ? (
             <pre className="whitespace-pre-wrap break-words text-xs bg-gray-100 dark:bg-gray-800 rounded p-2 overflow-x-auto">
               {isExpanded 
                 ? transformation.result 

@@ -1,22 +1,31 @@
 use tauri::{Manager, State, WindowEvent, AppHandle};
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, GlobalShortcutExt};
 use std::sync::{Arc, Mutex};
+use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use tokio::sync::broadcast;
 
 mod commands;
 mod clipboard_monitor;
 mod content_detection;
+mod database;
 
 use commands::*;
 use clipboard_monitor::ClipboardMonitor;
+
+/**
+ * Task cancellation token for AI requests
+ */
+pub type CancellationToken = broadcast::Sender<()>;
 
 /**
  * Application state that holds shared resources
  */
 #[derive(Default)]
 pub struct AppState {
-    pub clipboard_monitor: Arc<Mutex<Option<ClipboardMonitor>>>,
+    pub clipboard_monitor: Arc<Mutex<Option<Arc<ClipboardMonitor>>>>,
+    pub active_ai_tasks: Arc<Mutex<HashMap<String, CancellationToken>>>,
 }
 
 /**
@@ -46,7 +55,9 @@ pub struct AITransformation {
     pub description: String,
     pub result: String,
     pub confidence: f64,
+    #[serde(rename = "isApplied")]
     pub is_applied: bool,
+    #[serde(rename = "transformationType")]
     pub transformation_type: String,
 }
 
@@ -108,14 +119,41 @@ fn setup_global_shortcut(app: &tauri::App) -> Result<(), Box<dyn std::error::Err
 
 /**
  * Initialize the database and clipboard monitor
+ * 
+ * This function sets up the core clipboard monitoring functionality:
+ * 1. Creates a new ClipboardMonitor instance
+ * 2. Initializes SQLite database with proper schema
+ * 3. Starts background clipboard monitoring (checks every 1 second)
+ * 4. Stores the monitor in application state for access by Tauri commands
+ * 
+ * The clipboard monitor will automatically:
+ * - Detect clipboard content changes
+ * - Store new content in the database
+ * - Maintain only the latest 20 items
+ * - Prevent duplicate storage within 1-hour windows
  */
 async fn setup_app_state(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let state: State<AppState> = app.state();
     
-    // Initialize clipboard monitor
-    let monitor = ClipboardMonitor::new();
-    *state.clipboard_monitor.lock().unwrap() = Some(monitor);
+    // STEP 1: Create clipboard monitor instance
+    let mut monitor = ClipboardMonitor::new();
     
+    // STEP 2: Initialize SQLite database for clipboard history storage
+    // This creates the database file and necessary tables if they don't exist
+    monitor.initialize_database().await?;
+    
+    // STEP 3: Start automatic clipboard monitoring
+    // The monitor will check clipboard content every 1000ms (1 second)
+    // and automatically store new content to the database
+    let app_handle_clone = app.clone();
+    monitor.start_monitoring(app_handle_clone, 1000).await?;
+    
+    // STEP 4: Store monitor in application state for access by Tauri commands
+    // This allows frontend commands to access clipboard history through the monitor
+    *state.clipboard_monitor.lock().unwrap() = Some(Arc::new(monitor));
+    
+    log::info!("🚀 Clipboard monitoring initialized and started with database persistence");
+    log::info!("📋 Monitoring interval: 1000ms | Max items: 20 | Database: SQLite");
     Ok(())
 }
 
@@ -165,10 +203,10 @@ pub fn run() {
             register_global_shortcut,
             unregister_global_shortcut,
             process_with_ai,
-            get_ai_transformations,
             check_ai_status,
             toggle_panel_visibility,
-            show_panel
+            show_panel,
+            cancel_ai_requests
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

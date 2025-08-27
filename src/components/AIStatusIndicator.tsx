@@ -80,11 +80,11 @@ export const AIStatusIndicator: React.FC<AIStatusIndicatorProps> = ({
     return (
       <div className={`flex items-center ${className}`}>
         {isReady ? (
-          <CheckCircle className="w-4 h-4 text-green-500" title="AI Ready" />
+          <CheckCircle className="w-4 h-4 text-green-500" />
         ) : isPartiallyReady ? (
-          <AlertCircle className="w-4 h-4 text-yellow-500" title="AI Partially Ready" />
+          <AlertCircle className="w-4 h-4 text-yellow-500" />
         ) : (
-          <AlertCircle className="w-4 h-4 text-red-500" title="AI Not Available" />
+          <AlertCircle className="w-4 h-4 text-red-500" />
         )}
       </div>
     );
