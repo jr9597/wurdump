@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { Copy, Code, Link, Mail, FileText, Hash } from 'lucide-react';
+import { Copy, Code, Link, Mail, FileText, Hash, ChevronDown, ChevronUp } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import clsx from 'clsx';
 // import type { ContentType } from '../types/clipboard';
@@ -120,7 +120,7 @@ export const ClipboardItemComponent: React.FC<ClipboardItemProps> = ({
   const formattedContent = formatContent(content, contentType);
   const isCode = contentType === 'code';
   const relativeTime = formatDistanceToNow(timestamp, { addSuffix: true });
-  const needsExpansion = content.length > 150;
+  const isTruncated = content.length > 150;
 
   return (
     <div className={clsx('clipboard-item group', className)}>
@@ -169,18 +169,36 @@ export const ClipboardItemComponent: React.FC<ClipboardItemProps> = ({
         )}
       </div>
 
-      {/* Expand/Collapse button and character count for longer content */}
-      {needsExpansion && (
+      {/* Expand/Collapse button and character count */}
+      {isTruncated && (
         <div className="mt-2 flex items-center justify-between">
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="text-xs text-blue-600 dark:text-blue-400 hover:underline focus:outline-none"
-          >
-            {isExpanded ? 'Show less' : 'Show more'}
-          </button>
           <div className="text-xs text-gray-500 dark:text-gray-500">
             {content.length.toLocaleString()} characters
           </div>
+          
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
+          >
+            {isExpanded ? (
+              <>
+                Show less
+                <ChevronUp className="w-3 h-3" />
+              </>
+            ) : (
+              <>
+                Show more
+                <ChevronDown className="w-3 h-3" />
+              </>
+            )}
+          </button>
+        </div>
+      )}
+      
+      {/* Show character count for non-truncated content */}
+      {!isTruncated && content.length > 50 && (
+        <div className="mt-2 text-xs text-gray-500 dark:text-gray-500">
+          {content.length.toLocaleString()} characters
         </div>
       )}
     </div>

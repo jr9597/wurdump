@@ -87,8 +87,8 @@ export class AIService {
     try {
       return await invoke<AITransformation[]>('process_with_ai', { 
         content, 
-        custom_prompt: customPrompt,
-        context_items: contextItems
+        customPrompt,
+        contextItems
       });
     } catch (error) {
       console.error('Failed to process content with AI:', error);

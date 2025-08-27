@@ -219,11 +219,17 @@ pub async fn process_with_ai(
                content.len(), 
                context_items.as_ref().map(|items| items.len()).unwrap_or(0));
     
-    // Debug logging to check if context is being received
+    // Debug logging for context items
     if let Some(ref context) = context_items {
-        log::info!("📝 Context items received: {:?}", context.iter().map(|item| &item[..50.min(item.len())]).collect::<Vec<_>>());
+        log::info!("🔍 Context items received:");
+        for (i, item) in context.iter().enumerate() {
+            log::info!("  Context {}: {} chars - Preview: {}", 
+                      i + 1, 
+                      item.len(), 
+                      &item.chars().take(50).collect::<String>());
+        }
     } else {
-        log::info!("📝 No context items received");
+        log::info!("❌ No context items provided");
     }
 
     // Create a unique task ID for this request
@@ -239,7 +245,7 @@ pub async fn process_with_ai(
     // Enhanced prompt building with context support
     let system_prompt = "You are an AI assistant that helps transform clipboard content. Be helpful, accurate, and preserve important information. When provided with additional context, use it to give better, more relevant responses.";
     
-    let _has_custom_prompt = custom_prompt.is_some();
+    let has_custom_prompt = custom_prompt.is_some();
     let mut user_prompt = String::new();
     
     // Add context items if provided
@@ -262,12 +268,18 @@ pub async fn process_with_ai(
         user_prompt.push_str("Please improve and format this content, taking into account any provided context.");
     }
 
-    // Debug: log the final prompt being sent
-    log::info!("📤 Final user prompt (first 500 chars): {}", &user_prompt[..500.min(user_prompt.len())]);
-    
     // Build request with dynamic token limit based on content size
     let estimated_tokens = (content.len() + user_prompt.len()) / 4; // Rough estimation
     let max_tokens = if estimated_tokens > 2000 { 2000 } else { 1000 };
+    
+    // Log the final prompt being sent to AI
+    log::info!("📝 Final prompt being sent to AI:");
+    log::info!("System: {}", system_prompt);
+    log::info!("User prompt (first 500 chars): {}", 
+              &user_prompt.chars().take(500).collect::<String>());
+    if user_prompt.len() > 500 {
+        log::info!("... (prompt continues for {} more chars)", user_prompt.len() - 500);
+    }
     
     let request_body = serde_json::json!({
         "model": "gpt-oss:20b",
