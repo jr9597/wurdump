@@ -4,7 +4,6 @@
  */
 
 use sqlx::{Pool, Sqlite, SqlitePool, Row};
-use sqlx::sqlite::SqliteConnectOptions;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 use anyhow::{Result, Context};

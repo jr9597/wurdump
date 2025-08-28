@@ -338,139 +338,144 @@ export const ClipboardPanel: React.FC<ClipboardPanelProps> = ({
             )}
 
             {activeTab === 'current' ? (
-              <div className="p-4 h-full flex flex-col">
-                {/* Current Clipboard Content */}
-                <div className="mb-4">
-                  <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Current Clipboard
-                  </h3>
-                  
-                  {isLoading ? (
-                    <div className="flex items-center justify-center py-8">
-                      <LoadingSpinner size="md" />
-                    </div>
-                  ) : currentContent ? (
-                    <ClipboardItemComponent
-                      content={currentContent}
-                      preview={currentContent.substring(0, 200)}
-                      contentType="auto"
-                      timestamp={new Date()}
-                      onCopy={() => copyToClipboard(currentContent)}
-                      showCopyButton={false} // Already in clipboard
-                    />
-                  ) : (
-                    <p className="text-sm text-gray-500 dark:text-gray-400 py-4 text-center">
-                      No clipboard content
-                    </p>
-                  )}
-                </div>
-
-                {/* Context Items Section */}
-                {contextItems.length > 0 && (
+              <div className="p-4 h-full flex flex-col overflow-hidden">
+                {/* Scrollable content container */}
+                <div className="flex-1 overflow-y-auto scrollbar-thin pr-2">
+                  {/* Current Clipboard Content */}
                   <div className="mb-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                        Added Context ({contextItems.length})
-                      </label>
-                      <button
-                        onClick={clearAllContext}
-                        className="text-xs text-red-600 dark:text-red-400 hover:underline"
-                      >
-                        Clear All
-                      </button>
-                    </div>
-                    
-                    <div className="space-y-2 max-h-32 overflow-y-auto scrollbar-thin">
-                      {contextItems.map((item) => (
-                        <div
-                          key={item.id}
-                          className="group relative bg-gray-50 dark:bg-gray-800 p-2 rounded border"
-                        >
-                          <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">
-                            {new Date(item.timestamp).toLocaleTimeString()}
-                          </div>
-                          <div className="text-sm text-gray-900 dark:text-gray-100 pr-6">
-                            {item.preview}
-                          </div>
-                          <button
-                            onClick={() => removeFromContext(item.id)}
-                            className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity bg-red-500 hover:bg-red-600 text-white p-1 rounded text-xs"
-                            title="Remove from context"
-                          >
-                            ×
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Custom AI Prompt */}
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    AI Assistant
-                    {contextItems.length > 0 && (
-                      <span className="ml-2 text-xs text-blue-600 dark:text-blue-400">
-                        (with {contextItems.length} context item{contextItems.length !== 1 ? 's' : ''})
-                      </span>
-                    )}
-                  </label>
-                  
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={customPrompt}
-                      onChange={(e) => setCustomPrompt(e.target.value)}
-                      placeholder={isProcessingAI ? "Processing your request..." : "Ask AI to transform the content..."}
-                      className="input-field flex-1 text-sm"
-                      disabled={isProcessingAI}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && customPrompt.trim() && !isProcessingAI) {
-                          processWithCustomPrompt();
-                        }
-                      }}
-                    />
-                    
-                    <div className="relative group">
-                      <button
-                        onClick={isProcessingAI ? cancelAIRequest : processWithCustomPrompt}
-                        disabled={!currentContent.trim() || (!customPrompt.trim() && !isProcessingAI)}
-                        className="btn-primary px-3 relative overflow-hidden"
-                        title={isProcessingAI ? "Click to cancel" : "Process with AI"}
-                      >
-                        {isProcessingAI ? (
-                          <>
-                            {/* Default loading spinner */}
-                            <div className="group-hover:opacity-0 transition-opacity duration-200">
-                              <LoadingSpinner size="sm" color="text-white" />
-                            </div>
-                            {/* Cancel icon on hover */}
-                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                              <X className="w-4 h-4 text-white" />
-                            </div>
-                          </>
-                        ) : (
-                          <Sparkles className="w-4 h-4" />
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* AI Transformations */}
-                {aiTransformations.length > 0 && (
-                  <div className="flex-1 overflow-y-auto scrollbar-thin max-h-64">
                     <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      AI Suggestions
+                      Current Clipboard
                     </h3>
                     
-                    <AITransformationList
-                      transformations={aiTransformations}
-                      onCopy={copyToClipboard}
-                      className="h-full"
-                    />
+                    {isLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <LoadingSpinner size="md" />
+                      </div>
+                    ) : currentContent ? (
+                      <ClipboardItemComponent
+                        content={currentContent}
+                        preview={currentContent.substring(0, 200)}
+                        contentType="auto"
+                        timestamp={new Date()}
+                        onCopy={() => copyToClipboard(currentContent)}
+                        showCopyButton={false} // Already in clipboard
+                      />
+                    ) : (
+                      <p className="text-sm text-gray-500 dark:text-gray-400 py-4 text-center">
+                        No clipboard content
+                      </p>
+                    )}
                   </div>
-                )}
+
+                  {/* Context Items Section */}
+                  {contextItems.length > 0 && (
+                    <div className="mb-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                          Added Context ({contextItems.length})
+                        </label>
+                        <button
+                          onClick={clearAllContext}
+                          className="text-xs text-red-600 dark:text-red-400 hover:underline"
+                        >
+                          Clear All
+                        </button>
+                      </div>
+                      
+                      <div className="space-y-2 max-h-40 overflow-y-auto scrollbar-thin">
+                        {contextItems.map((item) => (
+                          <div
+                            key={item.id}
+                            className="group relative bg-gray-50 dark:bg-gray-800 p-2 rounded border"
+                          >
+                            <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">
+                              {new Date(item.timestamp).toLocaleTimeString()}
+                            </div>
+                            <div className="text-sm text-gray-900 dark:text-gray-100 pr-6">
+                              {item.preview}
+                            </div>
+                            <button
+                              onClick={() => removeFromContext(item.id)}
+                              className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity bg-red-500 hover:bg-red-600 text-white p-1 rounded text-xs"
+                              title="Remove from context"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Custom AI Prompt */}
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      AI Assistant
+                      {contextItems.length > 0 && (
+                        <span className="ml-2 text-xs text-blue-600 dark:text-blue-400">
+                          (with {contextItems.length} context item{contextItems.length !== 1 ? 's' : ''})
+                        </span>
+                      )}
+                    </label>
+                    
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={customPrompt}
+                        onChange={(e) => setCustomPrompt(e.target.value)}
+                        placeholder={isProcessingAI ? "Processing your request..." : "Ask AI to transform the content..."}
+                        className="input-field flex-1 text-sm"
+                        disabled={isProcessingAI}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && customPrompt.trim() && !isProcessingAI) {
+                            processWithCustomPrompt();
+                          }
+                        }}
+                      />
+                      
+                      <div className="relative group">
+                        <button
+                          onClick={isProcessingAI ? cancelAIRequest : processWithCustomPrompt}
+                          disabled={!currentContent.trim() || (!customPrompt.trim() && !isProcessingAI)}
+                          className="btn-primary px-3 relative overflow-hidden"
+                          title={isProcessingAI ? "Click to cancel" : "Process with AI"}
+                        >
+                          {isProcessingAI ? (
+                            <>
+                              {/* Default loading spinner */}
+                              <div className="group-hover:opacity-0 transition-opacity duration-200">
+                                <LoadingSpinner size="sm" color="text-white" />
+                              </div>
+                              {/* Cancel icon on hover */}
+                              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                <X className="w-4 h-4 text-white" />
+                              </div>
+                            </>
+                          ) : (
+                            <Sparkles className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* AI Transformations */}
+                  {aiTransformations.length > 0 && (
+                    <div className="mb-4">
+                      <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        AI Suggestions
+                      </h3>
+                      
+                      <div className="max-h-64 overflow-y-auto scrollbar-thin">
+                        <AITransformationList
+                          transformations={aiTransformations}
+                          onCopy={copyToClipboard}
+                          className="h-full"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="p-4 h-full flex flex-col">
