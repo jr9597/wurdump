@@ -23,13 +23,6 @@ A modern, local desktop application built with Tauri 2.0 that monitors your syst
 - **Icons**: Lucide React
 - **Build Tool**: Vite
 
-## 📦 Installation & Setup
-
-### Prerequisites
-
-1. **Rust**: Install from [rustup.rs](https://rustup.rs/)
-2. **Node.js**: Version 18+ recommended
-3. **gpt-oss model**: Download from [OpenAI gpt-oss repository](https://github.com/openai/gpt-oss)
 
 ### Development Setup
 
@@ -100,9 +93,9 @@ Default: `Cmd+Shift+V`
 
 ### AI Model Setup
 1. Currently works with gpt-oss:20b run locally with Ollama at http://localhost:11434
-2. Download ollama -> ollama pull gpt-oss:20b -> ollama run gpt-oss:20b -> (ollama run also automatically serves the model at localhost:11434)
+2. Download ollama -> ollama pull gpt-oss:20b -> ollama serve -> Ollama is ready serve pulled models at localhost:11434. Wurdump will interact with gpt-oss:20b at this port.
 3. For more info: https://cookbook.openai.com/articles/gpt-oss/run-locally-ollama
 
-**Made with ❤️ for the OpenAI Hackathon**
+**Made for the OpenAI Hackathon**
 
 Transform your clipboard workflow with AI-powered intelligence! 🚀
