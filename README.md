@@ -6,7 +6,7 @@ A modern, local desktop application built with Tauri 2.0 that monitors your syst
 
 ## 🚀 Features
 
-### ✅ Core Functionality (Completed)
+### ✅ Core Functionalities
 - **Global Hotkey**: Configurable system-wide shortcut (default: `Cmd+Shift+V`)
 - **Floating Panel UI**: Beautiful 300x400px panel that appears above all windows
 - **Clipboard Monitoring**: Real-time detection of clipboard changes
