@@ -42,7 +42,7 @@ npm run tauri:dev
 
 ```bash
 # Build the application
-npm run tauri:dev
+npm run tauri:build
 ```
 
 ## 🎯 Usage
