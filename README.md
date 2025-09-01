@@ -93,7 +93,7 @@ Default: `Cmd+Shift+V` (macOS) / `Ctrl+Shift+V` (Windows/Linux)
 - Platform-specific modifiers for optimal user experience
 
 ### AI Model Setup
-1. Currently works with gpt-oss:20b run locally with Ollama at http://localhost:11434
+1. Currently works with gpt-oss:20b running locally with Ollama at http://localhost:11434
 2. Download ollama -> ollama pull gpt-oss:20b -> ollama serve -> Ollama is ready serve pulled models at localhost:11434. Wurdump will interact with gpt-oss:20b at this port.
 3. For more info: https://cookbook.openai.com/articles/gpt-oss/run-locally-ollama
 
