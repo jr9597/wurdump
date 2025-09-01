@@ -2,6 +2,8 @@
  * Application constants for Wurdump
  */
 
+import { getPlatformShortcuts } from '../utils/platform';
+
 /** Application metadata */
 export const APP_NAME = 'Wurdump';
 export const APP_VERSION = '1.0.0';
@@ -129,12 +131,4 @@ export const SUCCESS_MESSAGES = {
 } as const;
 
 /** Keyboard shortcuts */
-export const SHORTCUTS = {
-  CLOSE_PANEL: 'Escape',
-  COPY_ITEM: 'Enter',
-  DELETE_ITEM: 'Delete',
-  TOGGLE_FAVORITE: 'F',
-  SEARCH: 'Cmd+F',
-  SETTINGS: 'Cmd+,',
-  CLEAR_HISTORY: 'Cmd+Shift+Delete'
-} as const;
+export const SHORTCUTS = getPlatformShortcuts();

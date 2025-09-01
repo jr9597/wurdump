@@ -7,7 +7,7 @@ A modern, local desktop application built with Tauri 2.0 that monitors your syst
 ## 🚀 Features
 
 ### ✅ Core Functionalities
-- **Global Hotkey**: Configurable system-wide shortcut (default: `Cmd+Shift+V`)
+- **Global Hotkey**: Configurable system-wide shortcut (default: `Cmd+Shift+V` on macOS, `Ctrl+Shift+V` on Windows/Linux)
 - **Floating Panel UI**: Beautiful 300x400px panel that appears above all windows
 - **Clipboard Monitoring**: Real-time detection of clipboard changes
 - **Local AI Processing**: Integrates OpenAI's gpt-oss-20b model via Ollama for offline processing
@@ -49,7 +49,7 @@ npm run tauri:build
 
 1. **Launch Wurdump**: The app runs in the background with a system tray icon
 2. **Copy Content**: Copy any text, code, or data to your clipboard
-3. **Activate Panel**: Press `Cmd+Shift+V` (or your configured hotkey)
+3. **Activate Panel**: Press `Cmd+Shift+V` (macOS) or `Ctrl+Shift+V` (Windows/Linux) (or your configured hotkey)
 4. **AI Transform**: Type a custom prompt or choose from suggested transformations
 5. **Apply & Copy**: Click any transformation to copy it back to your clipboard
 
@@ -86,10 +86,11 @@ wurdump/
 ## 🔧 Configuration
 
 ### Global Hotkey
-Default: `Cmd+Shift+V`
+Default: `Cmd+Shift+V` (macOS) / `Ctrl+Shift+V` (Windows/Linux)
 - Configurable through settings panel
 - Registers system-wide shortcut
 - Works across all applications
+- Platform-specific modifiers for optimal user experience
 
 ### AI Model Setup
 1. Currently works with gpt-oss:20b run locally with Ollama at http://localhost:11434

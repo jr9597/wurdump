@@ -7,6 +7,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { X, Settings, Sparkles, Trash2, Plus } from 'lucide-react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { ClipboardService, AIService, PanelService } from '../services/tauri-commands';
+import { getPlatformShortcuts } from '../utils/platform';
 import type { ClipboardItem, AITransformation } from '../types/clipboard';
 import { ClipboardItemComponent } from './ClipboardItem';
 import { AITransformationList } from './AITransformationList';
@@ -217,10 +218,13 @@ export const ClipboardPanel: React.FC<ClipboardPanelProps> = ({
     setContextItems([]);
   }, []);
 
+  // Get platform-specific shortcuts
+  const shortcuts = getPlatformShortcuts();
+
   // Keyboard shortcuts
   useHotkeys('escape', onClose, { enabled: isVisible });
-  useHotkeys('cmd+f', () => setActiveTab('history'), { enabled: isVisible });
-  useHotkeys('cmd+comma', onOpenSettings, { enabled: isVisible });
+  useHotkeys(shortcuts.SEARCH, () => setActiveTab('history'), { enabled: isVisible });
+  useHotkeys(shortcuts.SETTINGS, onOpenSettings, { enabled: isVisible });
   useHotkeys('enter', () => {
     if (customPrompt.trim()) {
       processWithCustomPrompt();
@@ -285,7 +289,7 @@ export const ClipboardPanel: React.FC<ClipboardPanelProps> = ({
               <button
                 onClick={onOpenSettings}
                 className="btn-ghost p-2"
-                title="Settings (Cmd+,)"
+                title={`Settings (${shortcuts.SETTINGS})`}
               >
                 <Settings className="w-4 h-4" />
               </button>

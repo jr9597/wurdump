@@ -96,9 +96,21 @@ impl Default for AppSettings {
 
 /**
  * Initialize the global shortcut for the application
+ * 
+ * Uses platform-specific modifiers:
+ * - macOS: Cmd+Shift+V (SUPER = Command key)
+ * - Windows: Ctrl+Shift+V (CONTROL = Ctrl key)
+ * - Linux: Ctrl+Shift+V (CONTROL = Ctrl key)
  */
 fn setup_global_shortcut(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
-    let shortcut = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyV);
+    // Use platform-specific modifiers
+    let modifiers = if cfg!(target_os = "macos") {
+        Modifiers::SUPER | Modifiers::SHIFT
+    } else {
+        Modifiers::CONTROL | Modifiers::SHIFT
+    };
+    
+    let shortcut = Shortcut::new(Some(modifiers), Code::KeyV);
     let app_handle = app.handle().clone();
     
     app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, event| {
@@ -113,7 +125,14 @@ fn setup_global_shortcut(app: &tauri::App) -> Result<(), Box<dyn std::error::Err
         }
     })?;
     
-    log::info!("Global shortcut Cmd+Shift+V registered successfully");
+    // Log platform-specific shortcut
+    let shortcut_name = if cfg!(target_os = "macos") {
+        "Cmd+Shift+V"
+    } else {
+        "Ctrl+Shift+V"
+    };
+    
+    log::info!("Global shortcut {} registered successfully", shortcut_name);
     
     Ok(())
 }

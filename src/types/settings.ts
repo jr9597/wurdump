@@ -2,6 +2,8 @@
  * Type definitions for application settings in Wurdump
  */
 
+import { getPlatformHotkey } from '../utils/platform';
+
 /**
  * Global hotkey configuration
  */
@@ -116,9 +118,7 @@ export interface AppSettings {
 export const DEFAULT_SETTINGS: AppSettings = {
   hotkey: {
     enabled: true,
-    modifiers: ['Cmd', 'Shift'],
-    key: 'V',
-    displayName: 'Cmd+Shift+V'
+    ...getPlatformHotkey()
   },
   ui: {
     theme: 'system',
