@@ -1,6 +1,6 @@
 # Wurdump 📋✨
 
-**AI-Enhanced Clipboard Tool for macOS**
+**AI-Enhanced Desktop Clipboard Tool**
 
 A modern, local desktop application built with Tauri 2.0 that monitors your system clipboard and provides intelligent AI transformations when pasting. Perfect for developers, writers, and power users who want to supercharge their clipboard workflow.
 
